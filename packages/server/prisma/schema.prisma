@@ -1,0 +1,73 @@
+generator client {
+  provider             = "prisma-client-py"
+  interface            = "asyncio"
+  recursive_type_depth = 5
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model AuthUser {
+  id         String   @id @default(cuid())
+  github_id  Int      @unique
+  email      String   @unique
+  name       String
+  avatar_url String?
+  role       String   @default("USER")
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  cookies_txt         String?
+  enable_cookies      Boolean   @default(false)
+  cookies_uploaded_at DateTime?
+
+  sessions      AuthSession[]
+  download_jobs DownloadJob[]
+}
+
+model AuthSession {
+  id         String   @id @default(cuid())
+  user_id    String
+  token      String   @unique
+  expires_at DateTime
+  ip_address String?
+  user_agent String?
+  created_at DateTime @default(now())
+
+  user AuthUser @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model AllowedEmail {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  created_at DateTime @default(now())
+}
+
+model AdminSetting {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  value      String
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+}
+
+///
+model DownloadJob {
+  id         String   @id @default(cuid())
+  url        String
+  title      String?
+  thumbnail  String?
+  status     String   @default("queued")
+  progress   Float    @default(0)
+  error      String?
+  filename   String?
+  file_size_kb  Float?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+  deleted_at DateTime?
+  user_id    String
+
+  user AuthUser @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}

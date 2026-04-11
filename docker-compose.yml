@@ -1,0 +1,29 @@
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    environment:
+      JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
+      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID}"
+      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL}"
+      DATABASE_URL: "postgresql://postgres:password@db:5432/yt-dropper"
+      MAX_CONCURRENT_DOWNLOADS: "2"
+    restart: always
+
+  db:
+    image: postgres:18
+    restart: always
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "password"
+
+volumes:
+  db_data:

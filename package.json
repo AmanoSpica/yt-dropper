@@ -1,0 +1,13 @@
+{
+  "name": "yt-dropper",
+  "packageManager": "yarn@4.12.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "yarn run dev:server & yarn run dev:app",
+    "dev:server": "yarn workspace @projects/server dev",
+    "dev:app": "yarn workspace @projects/app dev"
+  }
+}
