@@ -38,10 +38,6 @@ ENV UV_COMPILE_BYTECODE=0 \
 
 WORKDIR /app
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
-    rm -rf /var/lib/apt/lists/*
-
 COPY packages/server/pyproject.toml packages/server/uv.lock ./
 
 RUN uv sync \
@@ -70,6 +66,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SERVER_PORT=${SERVER_PORT}
 
 WORKDIR /app
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ffmpeg && \
+    rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid $USER_GID $USERNAME && \
     useradd --uid $USER_UID --gid $USER_GID -m $USERNAME
