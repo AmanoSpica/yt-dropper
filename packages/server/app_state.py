@@ -24,11 +24,12 @@ REFRESH_TOKEN_KEY = "refresh_token"
 ACCESS_TOKEN_LIFETIME = datetime.timedelta(minutes=5)
 REFRESH_TOKEN_LIFETIME = datetime.timedelta(days=7)
 
-GITHUB_CLIENT_ID = os.environ.get("GITHUB_CLIENT_ID", "")
-GITHUB_CLIENT_SECRET = os.environ.get("GITHUB_CLIENT_SECRET", "")
+DISCORD_CLIENT_ID = os.environ.get("DISCORD_CLIENT_ID", "")
+DISCORD_CLIENT_SECRET = os.environ.get("DISCORD_CLIENT_SECRET", "")
+DISCORD_REDIRECT_URL = os.environ.get("DISCORD_REDIRECT_URL", "")
 SESSION_COOKIE_NAME = "session_token"
 SESSION_MAX_AGE_DAYS = 30
-ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+ADMIN_DISCORD_ID = os.environ.get("ADMIN_DISCORD_ID", "")
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 

@@ -2,13 +2,13 @@
 
 export interface AuthUser {
   id: string;
-  github_id: number;
-  email: string;
+  discord_id: string;
+  email: string | null;
   name: string;
   avatar_url: string | null;
   role: "ADMIN" | "USER";
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
 
   cookies_txt?: string | null;
   enable_cookies: boolean;
@@ -17,17 +17,17 @@ export interface AuthUser {
 
 export interface ManagedUser {
   id: string;
-  github_id: number;
-  email: string;
+  discord_id: string;
+  email: string | null;
   name: string;
   avatar_url: string | null;
   role: string;
   created_at: string;
 }
 
-export interface AllowedEmail {
+export interface AllowedDiscordUser {
   id: string;
-  email: string;
+  discord_id: string;
   created_at: string;
 }
 
@@ -48,7 +48,7 @@ export interface AdminDownloadJob {
   user: {
     id: string;
     name: string;
-    email: string;
+    email: string | null;
     avatar_url: string | null;
     role: string;
   } | null;
@@ -96,35 +96,35 @@ export async function deleteUser(userId: string): Promise<void> {
   }
 }
 
-export async function fetchAllowedEmails(): Promise<AllowedEmail[]> {
-  const res = await fetch("/api/admin/allowed-emails");
-  if (!res.ok) throw new Error("許可メール一覧の取得に失敗しました");
-  const body = (await res.json()) as { emails: AllowedEmail[] };
-  return body.emails;
+export async function fetchAllowedDiscordUsers(): Promise<AllowedDiscordUser[]> {
+  const res = await fetch("/api/admin/allowed-discord-users");
+  if (!res.ok) throw new Error("許可Discord ユーザー一覧の取得に失敗しました");
+  const body = (await res.json()) as { discord_users: AllowedDiscordUser[] };
+  return body.discord_users;
 }
 
-export async function addAllowedEmail(email: string): Promise<AllowedEmail> {
-  const res = await fetch("/api/admin/allowed-emails", {
+export async function addAllowedDiscordUser(discordId: string): Promise<AllowedDiscordUser> {
+  const res = await fetch("/api/admin/allowed-discord-users", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify({ discord_id: discordId }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => null);
     throw new Error(
       (body as { detail?: string } | null)?.detail ??
-        "メールアドレスの追加に失敗しました",
+        "Discord ユーザーの追加に失敗しました",
     );
   }
-  return (await res.json()) as AllowedEmail;
+  return (await res.json()) as AllowedDiscordUser;
 }
 
-export async function deleteAllowedEmail(emailId: string): Promise<void> {
+export async function deleteAllowedDiscordUser(userId: string): Promise<void> {
   const res = await fetch(
-    `/api/admin/allowed-emails/${encodeURIComponent(emailId)}`,
+    `/api/admin/allowed-discord-users/${encodeURIComponent(userId)}`,
     { method: "DELETE" },
   );
-  if (!res.ok) throw new Error("メールアドレスの削除に失敗しました");
+  if (!res.ok) throw new Error("Discord ユーザーの削除に失敗しました");
 }
 
 export async function fetchAdminDownloadJobs(

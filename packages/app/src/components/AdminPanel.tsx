@@ -1,43 +1,45 @@
 import { Button } from "@/components/ui/button";
 import {
-  addAllowedEmail,
-  adminDeleteDownloadFiles,
-  deleteAllowedEmail,
-  deleteUser,
-  fetchActiveDownloads,
-  fetchAdminDiskUsage,
-  fetchAdminStorageLimit,
-  fetchAllowedEmails,
-  fetchCompletedDownloads,
-  fetchUsers,
-  updateAdminStorageLimit,
-  type AdminDiskUsage,
-  type AdminDownloadJob,
-  type AllowedEmail,
-  type ManagedUser,
+    addAllowedDiscordUser,
+    adminDeleteDownloadFiles,
+    deleteAllowedDiscordUser,
+    deleteUser,
+    fetchActiveDownloads,
+    fetchAdminDiskUsage,
+    fetchAdminStorageLimit,
+    fetchAllowedDiscordUsers,
+    fetchCompletedDownloads,
+    fetchUsers,
+    updateAdminStorageLimit,
+    type AdminDiskUsage,
+    type AdminDownloadJob,
+    type AllowedDiscordUser,
+    type ManagedUser,
 } from "@/lib/auth";
 import { formatFileSize, isFileDeleted } from "@/lib/utils";
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const DISCORD_ID_PATTERN = /^\d{17,19}$/;
 const DEFAULT_STORAGE_LIMIT_GB = 10;
 
 export function AdminPanel() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [emails, setEmails] = useState<AllowedEmail[]>([]);
+  const [discordUsers, setDiscordUsers] = useState<AllowedDiscordUser[]>([]);
   const [activeDownloads, setActiveDownloads] = useState<AdminDownloadJob[]>(
     [],
   );
   const [completedDownloads, setCompletedDownloads] = useState<
     AdminDownloadJob[]
   >([]);
-  const [newEmail, setNewEmail] = useState("");
+  const [newDiscordId, setNewDiscordId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
-  const [deletingEmailId, setDeletingEmailId] = useState<string | null>(null);
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
+  const [deletingDiscordUserId, setDeletingDiscordUserId] = useState<
+    string | null
+  >(null);
   const [selectedCompletedJobIds, setSelectedCompletedJobIds] = useState<
     string[]
   >([]);
@@ -47,8 +49,8 @@ export function AdminPanel() {
     DEFAULT_STORAGE_LIMIT_GB,
   );
   const [isSavingStorageLimit, setIsSavingStorageLimit] = useState(false);
-  const isNewEmailValid =
-    newEmail.trim() === "" || EMAIL_PATTERN.test(newEmail.trim());
+  const isNewDiscordIdValid =
+    newDiscordId.trim() === "" || DISCORD_ID_PATTERN.test(newDiscordId.trim());
 
   const usagePercent = useMemo(() => {
     if (!diskUsage || maxStorageGb <= 0) return 0;
@@ -73,21 +75,21 @@ export function AdminPanel() {
     try {
       const [
         nextUsers,
-        nextEmails,
+        nextDiscordUsers,
         nextActiveDownloads,
         nextCompletedDownloads,
         nextDiskUsage,
         nextStorageLimit,
       ] = await Promise.all([
         fetchUsers(),
-        fetchAllowedEmails(),
+        fetchAllowedDiscordUsers(),
         fetchActiveDownloads(),
         fetchCompletedDownloads(),
         fetchAdminDiskUsage(),
         fetchAdminStorageLimit(),
       ]);
       setUsers(nextUsers);
-      setEmails(nextEmails);
+      setDiscordUsers(nextDiscordUsers);
       setActiveDownloads(nextActiveDownloads);
       setCompletedDownloads(nextCompletedDownloads);
       setDiskUsage(nextDiskUsage);
@@ -134,21 +136,21 @@ export function AdminPanel() {
     }
   }
 
-  async function handleAddEmail() {
-    const trimmed = newEmail.trim();
+  async function handleAddDiscordUser() {
+    const trimmed = newDiscordId.trim();
     if (!trimmed) {
       return;
     }
-    if (!EMAIL_PATTERN.test(trimmed)) {
-      toast.error("有効なメールアドレスを入力してください");
+    if (!DISCORD_ID_PATTERN.test(trimmed)) {
+      toast.error("Discord ユーザーIDは17～19桁の数字で入力してください");
       return;
     }
     setIsAdding(true);
     try {
-      await addAllowedEmail(trimmed);
-      setNewEmail("");
+      await addAllowedDiscordUser(trimmed);
+      setNewDiscordId("");
       refresh();
-      toast.success("メールアドレスを追加しました");
+      toast.success("Discord ユーザーを追加しました");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "追加に失敗しました");
     } finally {
@@ -156,16 +158,16 @@ export function AdminPanel() {
     }
   }
 
-  async function handleDeleteEmail(id: string) {
-    setDeletingEmailId(id);
+  async function handleDeleteDiscordUser(id: string) {
+    setDeletingDiscordUserId(id);
     try {
-      await deleteAllowedEmail(id);
+      await deleteAllowedDiscordUser(id);
       refresh();
-      toast.success("メールアドレスを削除しました");
+      toast.success("Discord ユーザーを削除しました");
     } catch {
       toast.error("削除に失敗しました");
     } finally {
-      setDeletingEmailId(null);
+      setDeletingDiscordUserId(null);
     }
   }
 
@@ -217,31 +219,34 @@ export function AdminPanel() {
         <h2 className="text-lg font-semibold">ユーザー管理</h2>
 
         <section className="space-y-3">
-          <h3 className="text-sm font-medium">許可メールアドレス</h3>
+          <h3 className="text-sm font-medium">許可 Discord ユーザーID</h3>
           <p className="text-xs text-muted-foreground">
-            ここに追加されたメールアドレスのユーザーのみ GitHub
-            ログインが許可されます。ADMIN_EMAIL は自動で許可されます。
+            ここに追加された Discord
+            ユーザーのみログインが許可されます。ADMIN_DISCORD_ID は自動で許可されます。
           </p>
           <div className="flex gap-2">
             <input
-              type="email"
+              type="text"
               className="flex-1 rounded-md border bg-background px-3 py-1.5 text-sm"
-              placeholder="user@example.com"
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              aria-invalid={!isNewEmailValid}
+              placeholder="123456789012345678"
+              value={newDiscordId}
+              onChange={(e) => setNewDiscordId(e.target.value)}
+              aria-invalid={!isNewDiscordIdValid}
               disabled={isLoading || isAdding}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleAddEmail();
+                if (e.key === "Enter") handleAddDiscordUser();
               }}
             />
             <div>
               <Button
                 size="sm"
                 disabled={
-                  isAdding || isLoading || !newEmail.trim() || !isNewEmailValid
+                  isAdding ||
+                  isLoading ||
+                  !newDiscordId.trim() ||
+                  !isNewDiscordIdValid
                 }
-                onClick={handleAddEmail}
+                onClick={handleAddDiscordUser}
                 type="button"
                 className="h-full"
               >
@@ -256,30 +261,30 @@ export function AdminPanel() {
               </Button>
             </div>
           </div>
-          {newEmail.trim() !== "" && !isNewEmailValid && (
+          {newDiscordId.trim() !== "" && !isNewDiscordIdValid && (
             <p className="text-xs text-destructive">
-              メールアドレスの形式が正しくありません
+              Discord ユーザーIDは17～19桁の数字で入力してください
             </p>
           )}
           {isLoading ? (
             <p className="text-xs text-muted-foreground">読み込み中...</p>
-          ) : emails.length > 0 ? (
+          ) : discordUsers.length > 0 ? (
             <ul className="space-y-1">
-              {emails.map((e) => (
+              {discordUsers.map((u) => (
                 <li
-                  key={e.id}
+                  key={u.id}
                   className="flex items-center justify-between rounded-md border px-3 py-1.5 text-sm"
                 >
-                  <span>{e.email}</span>
+                  <span className="font-mono">{u.discord_id}</span>
                   <Button
                     variant="ghost"
                     size="xs"
                     className="text-destructive"
-                    disabled={deletingEmailId === e.id}
+                    disabled={deletingDiscordUserId === u.id}
                     type="button"
-                    onClick={() => handleDeleteEmail(e.id)}
+                    onClick={() => handleDeleteDiscordUser(u.id)}
                   >
-                    {deletingEmailId === e.id ? (
+                    {deletingDiscordUserId === u.id ? (
                       <LoaderCircle className="size-3.5 animate-spin" />
                     ) : (
                       "削除"
@@ -290,7 +295,7 @@ export function AdminPanel() {
             </ul>
           ) : (
             <p className="text-xs text-muted-foreground">
-              許可メールアドレスはまだありません
+              許可 Discord ユーザーはまだありません
             </p>
           )}
         </section>
@@ -317,8 +322,8 @@ export function AdminPanel() {
                       />
                     )}
                     <span>{u.name}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {u.email}
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {u.discord_id}
                     </span>
                     {u.role === "ADMIN" && (
                       <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">

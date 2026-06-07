@@ -11,8 +11,8 @@ datasource db {
 
 model AuthUser {
   id         String   @id @default(cuid())
-  github_id  Int      @unique
-  email      String   @unique
+  discord_id String   @unique
+  email      String?
   name       String
   avatar_url String?
   role       String   @default("USER")
@@ -39,9 +39,9 @@ model AuthSession {
   user AuthUser @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }
 
-model AllowedEmail {
+model AllowedDiscordUser {
   id         String   @id @default(cuid())
-  email      String   @unique
+  discord_id String   @unique
   created_at DateTime @default(now())
 }
 

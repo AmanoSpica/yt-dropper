@@ -11,9 +11,10 @@ from pydantic import BaseModel, Field, field_validator
 
 from app_state import (
     ENVIRONMENT,
-    ADMIN_EMAIL,
-    GITHUB_CLIENT_ID,
-    GITHUB_CLIENT_SECRET,
+    ADMIN_DISCORD_ID,
+    DISCORD_CLIENT_ID,
+    DISCORD_CLIENT_SECRET,
+    DISCORD_REDIRECT_URL,
     JWT_SECRET_KEY,
     JWT_ALGORITHM,
     SESSION_COOKIE_NAME,
@@ -25,15 +26,17 @@ from app_state import (
 router = APIRouter()
 
 
-class AllowedEmailRequest(BaseModel):
-    email: str = Field(min_length=3, max_length=254)
+class AllowedDiscordUserRequest(BaseModel):
+    discord_id: str = Field(min_length=17, max_length=19)
 
-    @field_validator("email")
+    @field_validator("discord_id")
     @classmethod
-    def normalize_and_validate_email(cls, value: str) -> str:
-        normalized = value.lower().strip()
-        if not normalized or "@" not in normalized:
-            raise ValueError("有効なメールアドレスを入力してください")
+    def validate_discord_id(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized.isdigit():
+            raise ValueError("Discord ID は数字のみで構成される必要があります")
+        if len(normalized) < 17 or len(normalized) > 19:
+            raise ValueError("Discord ID は17～19桁である必要があります")
         return normalized
 
 
@@ -98,20 +101,23 @@ def _verify_oauth_state(token: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid state")
 
 
-@router.get("/api/auth/github")
-async def auth_github_redirect() -> RedirectResponse:
-    if not GITHUB_CLIENT_ID:
-        raise HTTPException(status_code=500, detail="GITHUB_CLIENT_ID is not configured")
-    if not GITHUB_CLIENT_SECRET:
-        raise HTTPException(status_code=500, detail="GITHUB_CLIENT_SECRET is not configured")
+@router.get("/api/auth/discord")
+async def auth_discord_redirect() -> RedirectResponse:
+    if not DISCORD_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="DISCORD_CLIENT_ID is not configured")
+
+    if not DISCORD_REDIRECT_URL:
+        raise HTTPException(status_code=500, detail="DISCORD_REDIRECT_URL is not configured")
 
     state_token = _create_oauth_state()
     params = urlencode({
-        "client_id": GITHUB_CLIENT_ID,
-        "scope": "read:user user:email",
+        "client_id": DISCORD_CLIENT_ID,
+        "redirect_url": DISCORD_REDIRECT_URL,
+        "scope": "identify email",
+        "response_type": "code",
         "state": state_token,
     })
-    response = RedirectResponse(url=f"https://github.com/login/oauth/authorize?{params}")
+    response = RedirectResponse(url=f"https://discord.com/oauth2/authorize?{params}")
     response.set_cookie(
         key=OAUTH_STATE_COOKIE_NAME,
         value=state_token,
@@ -124,27 +130,30 @@ async def auth_github_redirect() -> RedirectResponse:
     return response
 
 
-@router.get("/api/auth/github/callback")
-async def auth_github_callback(code: str, state: str, request: Request) -> RedirectResponse:
+@router.get("/api/auth/discord/callback")
+async def auth_discord_callback(code: str, state: str, request: Request) -> RedirectResponse:
     # Verify state JWT token
     _verify_oauth_state(state)
 
-    if not GITHUB_CLIENT_ID:
-        raise HTTPException(status_code=500, detail="GITHUB_CLIENT_ID is not configured")
-    if not GITHUB_CLIENT_SECRET:
-        raise HTTPException(status_code=500, detail="GITHUB_CLIENT_SECRET is not configured")
+    if not DISCORD_CLIENT_ID:
+        raise HTTPException(status_code=500, detail="DISCORD_CLIENT_ID is not configured")
+    if not DISCORD_CLIENT_SECRET:
+        raise HTTPException(status_code=500, detail="DISCORD_CLIENT_SECRET is not configured")
+    if not DISCORD_REDIRECT_URL:
+        raise HTTPException(status_code=500, detail="DISCORD_REDIRECT_URL is not configured")
 
     token_payload = {
-        "client_id": GITHUB_CLIENT_ID,
-        "client_secret": GITHUB_CLIENT_SECRET,
+        "client_id": DISCORD_CLIENT_ID,
+        "client_secret": DISCORD_CLIENT_SECRET,
         "code": code,
+        "grant_type": "authorization_code",
+        "redirect_url": DISCORD_REDIRECT_URL,
     }
 
     async with httpx.AsyncClient() as client:
         token_resp = await client.post(
-            "https://github.com/login/oauth/access_token",
+            "https://discord.com/api/oauth2/token",
             data=token_payload,
-            headers={"Accept": "application/json"},
         )
 
     try:
@@ -168,48 +177,38 @@ async def auth_github_callback(code: str, state: str, request: Request) -> Redir
 
     async with httpx.AsyncClient() as client:
         user_resp = await client.get(
-            "https://api.github.com/user",
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            "https://discord.com/api/users/@me",
+            headers={"Authorization": f"Bearer {access_token}"},
         )
-        github_user = user_resp.json()
+        discord_user = user_resp.json()
 
-    github_id = github_user.get("id")
-    if not isinstance(github_id, int):
-        raise HTTPException(status_code=400, detail="Failed to get GitHub user")
+    discord_id = discord_user.get("id")
+    if not discord_id:
+        raise HTTPException(status_code=400, detail="Failed to get Discord user ID")
 
-    name = github_user.get("name") or github_user.get("login") or "Unknown"
-    avatar_url = github_user.get("avatar_url")
+    username = discord_user.get("username", "Unknown")
+    global_name = discord_user.get("global_name")
+    name = global_name or username
+    email: str | None = discord_user.get("email")
+    avatar_hash = discord_user.get("avatar")
 
-    email: str | None = github_user.get("email")
-    if not email:
-        async with httpx.AsyncClient() as client:
-            emails_resp = await client.get(
-                "https://api.github.com/user/emails",
-                headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            )
-            if emails_resp.status_code == 200:
-                for entry in emails_resp.json():
-                    if isinstance(entry, dict) and entry.get("primary") and entry.get("verified"):
-                        email = entry.get("email")
-                        break
-    if not email:
-        raise HTTPException(status_code=400, detail="GitHub アカウントにメールアドレスが見つかりません")
+    avatar_url = None
+    if avatar_hash:
+        avatar_url = f"https://cdn.discordapp.com/avatars/{discord_id}/{avatar_hash}.png"
 
-    email = email.lower().strip()
-
-    logger.info(f"[AUTH] github_email={email!r}, ADMIN_EMAIL={ADMIN_EMAIL!r}, match={email == ADMIN_EMAIL.lower().strip()}")
-    is_admin_email = ADMIN_EMAIL and email == ADMIN_EMAIL.lower().strip()
-    if not is_admin_email:
-        allowed = await db.allowedemail.find_unique(where={"email": email})
+    logger.info(f"[AUTH] discord_id={discord_id!r}, ADMIN_DISCORD_ID={ADMIN_DISCORD_ID!r}, match={discord_id == ADMIN_DISCORD_ID}")
+    is_admin = ADMIN_DISCORD_ID and discord_id == ADMIN_DISCORD_ID
+    if not is_admin:
+        allowed = await db.alloweddiscorduser.find_unique(where={"discord_id": discord_id})
         if allowed is None:
-            raise HTTPException(status_code=403, detail="このメールアドレスはアクセスが許可されていません")
+            raise HTTPException(status_code=403, detail="このDiscordユーザーはアクセスが許可されていません")
 
-    role = "ADMIN" if is_admin_email else "USER"
+    role = "ADMIN" if is_admin else "USER"
 
     user = await db.authuser.upsert(
-        where={"github_id": github_id},
+        where={"discord_id": discord_id},
         data={
-            "create": {"github_id": github_id, "email": email, "name": name, "avatar_url": avatar_url, "role": role},
+            "create": {"discord_id": discord_id, "email": email, "name": name, "avatar_url": avatar_url, "role": role},
             "update": {"name": name, "avatar_url": avatar_url, "email": email, "role": role},
         },
     )
@@ -247,7 +246,7 @@ async def auth_me(request: Request) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="Not authenticated")
     return {
         "id": user.id,
-        "github_id": user.github_id,
+        "discord_id": user.discord_id,
         "email": user.email,
         "name": user.name,
         "avatar_url": user.avatar_url,
@@ -275,7 +274,7 @@ async def list_users(request: Request) -> dict[str, Any]:
         "users": [
             {
                 "id": u.id,
-                "github_id": u.github_id,
+                "discord_id": u.discord_id,
                 "email": u.email,
                 "name": u.name,
                 "avatar_url": u.avatar_url,
@@ -303,34 +302,34 @@ async def delete_user(user_id: str, request: Request) -> dict[str, str]:
     return {"status": "deleted"}
 
 
-@router.get("/api/admin/allowed-emails")
-async def list_allowed_emails(request: Request) -> dict[str, Any]:
+@router.get("/api/admin/allowed-discord-users")
+async def list_allowed_discord_users(request: Request) -> dict[str, Any]:
     await require_admin(request)
-    rows = await db.allowedemail.find_many(order={"created_at": "asc"})
+    rows = await db.alloweddiscorduser.find_many(order={"created_at": "asc"})
     return {
-        "emails": [
-            {"id": r.id, "email": r.email, "created_at": r.created_at.isoformat()}
+        "discord_users": [
+            {"id": r.id, "discord_id": r.discord_id, "created_at": r.created_at.isoformat()}
             for r in rows
         ]
     }
 
 
-@router.post("/api/admin/allowed-emails")
-async def add_allowed_email(payload: AllowedEmailRequest, request: Request) -> dict[str, Any]:
+@router.post("/api/admin/allowed-discord-users")
+async def add_allowed_discord_user(payload: AllowedDiscordUserRequest, request: Request) -> dict[str, Any]:
     await require_admin(request)
-    email = payload.email
-    existing = await db.allowedemail.find_unique(where={"email": email})
+    discord_id = payload.discord_id
+    existing = await db.alloweddiscorduser.find_unique(where={"discord_id": discord_id})
     if existing:
-        raise HTTPException(status_code=409, detail="このメールアドレスは既に登録されています")
-    row = await db.allowedemail.create(data={"email": email})
-    return {"id": row.id, "email": row.email, "created_at": row.created_at.isoformat()}
+        raise HTTPException(status_code=409, detail="このDiscord ユーザーは既に登録されています")
+    row = await db.alloweddiscorduser.create(data={"discord_id": discord_id})
+    return {"id": row.id, "discord_id": row.discord_id, "created_at": row.created_at.isoformat()}
 
 
-@router.delete("/api/admin/allowed-emails/{email_id}")
-async def delete_allowed_email(email_id: str, request: Request) -> dict[str, str]:
+@router.delete("/api/admin/allowed-discord-users/{user_id}")
+async def delete_allowed_discord_user(user_id: str, request: Request) -> dict[str, str]:
     await require_admin(request)
-    row = await db.allowedemail.find_unique(where={"id": email_id})
+    row = await db.alloweddiscorduser.find_unique(where={"id": user_id})
     if row is None:
-        raise HTTPException(status_code=404, detail="メールアドレスが見つかりません")
-    await db.allowedemail.delete(where={"id": email_id})
+        raise HTTPException(status_code=404, detail="Discord ユーザーが見つかりません")
+    await db.alloweddiscorduser.delete(where={"id": user_id})
     return {"status": "deleted"}

@@ -7,9 +7,9 @@ services:
       - db
     environment:
       JWT_SECRET_KEY: "${JWT_SECRET_KEY}"
-      GITHUB_CLIENT_ID: "${GITHUB_CLIENT_ID}"
-      GITHUB_CLIENT_SECRET: "${GITHUB_CLIENT_SECRET}"
-      ADMIN_EMAIL: "${ADMIN_EMAIL}"
+      DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID}"
+      DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET}"
+      ADMIN_DISCORD_ID: "${ADMIN_DISCORD_ID}"
       DATABASE_URL: "postgresql://postgres:password@db:5432/yt-dropper"
       MAX_CONCURRENT_DOWNLOADS: "2"
     restart: always
