@@ -10,6 +10,7 @@ dependencies = [
     "prisma>=0.15.0",
     "pyjwt>=2.12.1",
     "python-dotenv>=1.2.2",
+    "python-multipart>=0.0.32",
     "uvicorn>=0.46.0",
     "yt-dlp",
     "yt-dlp-ejs",
